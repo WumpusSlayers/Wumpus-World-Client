@@ -20,7 +20,8 @@ const state = {
   kbSummary: null,
   isAutoPlaying: false,
   autoPlayIntervalId: null,
-  logs: []
+  logs: [],
+  goldLocations: []
 };
 
 // 3. DOM Elements Cache
@@ -268,10 +269,20 @@ function drawKbMap() {
         badgeContainer.appendChild(span);
       }
       
+      // Draw persistent gold badge if discovered at this coordinate
+      const hasGoldHere = state.goldLocations.some(loc => loc.x === x && loc.y === y);
+      if (hasGoldHere) {
+        const span = document.createElement('span');
+        span.className = 'kb-pill-gold';
+        span.textContent = '✨👑';
+        span.title = '금 발견 위치';
+        badgeContainer.appendChild(span);
+      }
+      
       if (cell.definitePit) {
         const span = document.createElement('span');
         span.className = 'kb-pill-pit-definite';
-        span.textContent = '!';
+        span.textContent = '🕳️!';
         badgeContainer.appendChild(span);
       } else if (cell.possiblePit) {
         const span = document.createElement('span');
@@ -283,7 +294,7 @@ function drawKbMap() {
       if (cell.definiteWumpus) {
         const span = document.createElement('span');
         span.className = 'kb-pill-wumpus-definite';
-        span.textContent = '@';
+        span.textContent = '👾@';
         badgeContainer.appendChild(span);
       } else if (cell.possibleWumpus) {
         const span = document.createElement('span');
@@ -356,6 +367,24 @@ function processActionLog(actionResult) {
   }
 }
 
+// Helper to cache discovered gold locations
+function updateGoldLocations() {
+  if (!state.board || !state.board.grid || !state.board.grid.cells) return;
+  const cells = state.board.grid.cells;
+  for (let x = 1; x <= 4; x++) {
+    for (let y = 1; y <= 4; y++) {
+      const cell = cells[x - 1][y - 1];
+      if (cell && cell.visited && cell.hasGold) {
+        const alreadySaved = state.goldLocations.some(loc => loc.x === x && loc.y === y);
+        if (!alreadySaved) {
+          state.goldLocations.push({ x, y });
+          addLog('KB 업데이트', `금 발견 위치 기록됨: (${x}, ${y}) ✨👑`, 'kb-update');
+        }
+      }
+    }
+  }
+}
+
 // 9. Sync State & Refresh UI
 async function refreshState() {
   try {
@@ -364,6 +393,8 @@ async function refreshState() {
     
     const kbRes = await api.get(`/reasoning/summary?userId=${encodeURIComponent(state.userId)}`);
     state.kbSummary = kbRes.data;
+    
+    updateGoldLocations();
     
     updateHeaderBadges();
     drawGameMap();
@@ -390,6 +421,7 @@ async function startGame() {
     const response = await api.post(`/start?userId=${encodeURIComponent(username)}`);
     state.board = response.data;
     state.isPlaying = true;
+    state.goldLocations = [];
     
     // UI layout updates
     DOM.headerStats.style.display = 'flex';
@@ -403,6 +435,8 @@ async function startGame() {
     const kbRes = await api.get(`/reasoning/summary?userId=${encodeURIComponent(username)}`);
     state.kbSummary = kbRes.data;
     addLog('KB 업데이트', '(1,1) 시작 칸을 Safe 상태로 설정하여 전진 추론을 시작합니다.', 'kb-update');
+    
+    updateGoldLocations();
     
     // Draw
     updateHeaderBadges();
@@ -552,6 +586,7 @@ function resetGameUI() {
   state.isPlaying = false;
   state.board = null;
   state.kbSummary = null;
+  state.goldLocations = [];
   
   // UI restoration
   DOM.headerStats.style.display = 'none';
